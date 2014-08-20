@@ -10,9 +10,15 @@ FLAGS = 0
 # actually, delay in ms:
 FRAMERATE = 30
 
+
+WAVE_ENEMIES = [20]
+
 Group = pygame.sprite.OrderedUpdates
 
 class GameOver(Exception):
+    pass
+
+class NoEnemyInRange(Exception):
     pass
 
 
@@ -70,9 +76,20 @@ class BaseTowerObject(pygame.sprite.Sprite):
 
 
 class Targetting(BaseTowerObject):
+
+    movement_type = "tracking"
+    # possible_values: ("tracking", "straight")
+
     def update(self):
         super(Targetting, self).update()
-        objective = self.objective
+        movement_function = getattr(self, "_Targetting__%s" % self.__class__.movement_type)
+
+        movement_function()
+
+        self.rect.center = self.position
+
+    def __tracking(self):
+        objective = self.objective if isinstance(self.objective, pygame.sprite.Sprite) else self.objective.sprites()[0]
         if not objective:
             return
         for i in range(self.speed):
@@ -84,7 +101,7 @@ class Targetting(BaseTowerObject):
                 self.position.y -= 1
             elif  objective.position.y > self.position.y:
                 self.position.y += 1
-        self.rect.center = self.position
+
     
 class Enemy(Targetting):
     speed = 1
@@ -123,18 +140,26 @@ class Tower(BaseTowerObject):
             self.shoot()
     
     def shoot(self):
-        self.map_.shots.add(Shoot(self.map_, Vector(self.position)))
+        try:
+            self.map_.shots.add(Shot(self.map_, Vector(self.position)))
+        except NoEnemyInRange:
+            pass
 
-class Shoot(Targetting):
+class Shot(Targetting):
     size = 3
     color = (0, 255, 0)
     speed = 2
     range_ = 100
     
     def __init__(self, *args):
-        super(Shoot, self).__init__(*args)
+        super(Shot, self).__init__(*args)
         self.start_pos = self.position
-        self.objective = self.get_closer_enemy()
+        objective = self.get_closer_enemy()
+        if objective and self.position.distance(objective.position) <= self.range_:
+            self.objective = pygame.sprite.GroupSingle()
+            self.objective.sprite = objective
+        else:
+            raise NoEnemyInRange
         
     def get_closer_enemy(self):
         distance = max(SIZE) * 2
@@ -150,13 +175,13 @@ class Shoot(Targetting):
             self.kill()
             return
         
-        super(Shoot, self).update()
+        super(Shot, self).update()
         
-        if (self.position.distance(self.objective.position) < self.size / 2.0):
-            # self.objective.clear()
-            self.objective.kill()
-            self.objective = None
-            self.kill()
+        shot = None
+        for shot in pygame.sprite.spritecollide(self, self.map_.enemies, False):
+            shot.kill()
+        if shot: self.kill()
+
         if self.position.distance(self.start_pos) > self.range_:
             self.kill()
             
@@ -175,7 +200,7 @@ class Objective(BaseTowerObject):
         super(Objective, self).update()
         if len(self.enemies_reached) > self.lives:
             raise GameOver
-        
+
 class Map(object):
     def __init__(self):
         self.enemies = Group()
@@ -183,7 +208,7 @@ class Map(object):
         self.shots = Group()
         self.objective = Group()
 
-    
+
 def user_iteration(map_):
     pygame.event.pump()
     for event in pygame.event.get():
@@ -191,7 +216,7 @@ def user_iteration(map_):
             map_.towers.add(Tower(map_, Vector(event.pos)))
         elif event.type == KEYDOWN and event.key == K_ESCAPE:
             raise GameOver
-        
+
 def iteration(map_):
     global screen
     object_types = "enemies towers shots objective"
@@ -206,7 +231,7 @@ def iteration(map_):
 def start_map(map_):
     obj = Objective(map_, Vector(randint(0, SIZE[0]), randint(0, SIZE[1])))
     map_.objective.add(obj)
-    for i in range(50):
+    for i in range(WAVE_ENEMIES[0]):
         enemy = Enemy(map_, 
                       Vector(randint(0, SIZE[0]), randint(0, SIZE[1])))
         map_.enemies.add(enemy)
