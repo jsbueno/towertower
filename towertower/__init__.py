@@ -65,8 +65,9 @@ class Vector(object):
     def __repr__(self):
         return "Vector({}, {})".format(self.x, self.y)
     
+    epsilon = 1
     def __eq__(self, other):
-        return self[0] == other[0] and self[1] == other[1]
+        return self.distance(other) < self.epsilon
 
     def normalize(self):
         size = self.size()
@@ -140,6 +141,8 @@ class Enemy(Targetting):
         super(Enemy, self).update()
         if self.position == self.objective.position:
             self.objective.enemies_reached.add(self)
+            self.kill()
+            print len(self.objective.enemies_reached)
 
 
 class Tower(BaseTowerObject):
