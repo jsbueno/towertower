@@ -1,4 +1,6 @@
 # coding: utf-8
+from __future__ import division
+
 
 import random
 from random import randint
@@ -35,16 +37,25 @@ class Vector(object):
         if index == 0:
             return self.x
         return self.y
-     
+
     def __len__(self):
         return 2
-     
+
     def __add__(self, other):
         return Vector(self[0] + other[0], self[1] + other[1])
      
     def __sub__(self, other):
         return Vector(self[0] - other[0], self[1] - other[1])
+
+    def __mul__(self, other):
+        return Vector(self[0] * other, self[1] * other)
      
+    def __div__(self, other):
+        return Vector(self[0] / other, self[1] / other)
+
+    __truediv__ = __div__
+
+
     def size(self):
         return (self[0] ** 2 + self[1] ** 2) ** 0.5
      
@@ -56,6 +67,12 @@ class Vector(object):
     
     def __eq__(self, other):
         return self[0] == other[0] and self[1] == other[1]
+
+    def normalize(self):
+        size = self.size()
+        if size == 0:
+            return 0
+        return self / size
 
 def draw_bg(surface, rect=None):
     if rect is None:
@@ -82,25 +99,27 @@ class Targetting(BaseTowerObject):
 
     def update(self):
         super(Targetting, self).update()
-        movement_function = getattr(self, "_Targetting__%s" % self.__class__.movement_type)
-
+        movement_function = getattr(self, self.movement_type)
         movement_function()
 
         self.rect.center = self.position
 
-    def __tracking(self):
+    def tracking(self):
         objective = self.objective if isinstance(self.objective, pygame.sprite.Sprite) else self.objective.sprites()[0]
         if not objective:
             return
-        for i in range(self.speed):
-            if objective.position.x < self.position.x:
-                self.position.x -= 1
-            elif objective.position.x > self.position.x:
-                self.position.x += 1
-            if objective.position.y < self.position.y:
-                self.position.y -= 1
-            elif  objective.position.y > self.position.y:
-                self.position.y += 1
+        self.direction = (objective.position - self.position).normalize()
+        return self._update(self.direction)
+
+    def straight(self):
+        if not hasattr(self, "direction"):
+            objective = self.objective if isinstance(self.objective, pygame.sprite.Sprite) else self.objective.sprites()[0]
+            target_position = Vector(objective.position)
+            self.direction = (target_position - self.position).normalize()
+        return self._update(self.direction)
+
+    def _update(self, direction):
+        self.position += direction * self.speed
 
     
 class Enemy(Targetting):
@@ -148,9 +167,11 @@ class Tower(BaseTowerObject):
 class Shot(Targetting):
     size = 3
     color = (0, 255, 0)
-    speed = 2
-    range_ = 100
-    
+    speed = 5
+    range_ = 800
+
+    movement_type = "straight"
+
     def __init__(self, *args):
         super(Shot, self).__init__(*args)
         self.start_pos = self.position
@@ -160,7 +181,7 @@ class Shot(Targetting):
             self.objective.sprite = objective
         else:
             raise NoEnemyInRange
-        
+
     def get_closer_enemy(self):
         distance = max(SIZE) * 2
         closest = None
@@ -169,14 +190,14 @@ class Shot(Targetting):
                 closest = enemy
                 distance = self.position.distance(enemy.position)
         return closest
-    
+
     def update(self):
         if not self.objective:
             self.kill()
             return
-        
+
         super(Shot, self).update()
-        
+
         shot = None
         for shot in pygame.sprite.spritecollide(self, self.map_.enemies, False):
             shot.kill()
@@ -184,7 +205,8 @@ class Shot(Targetting):
 
         if self.position.distance(self.start_pos) > self.range_:
             self.kill()
-            
+
+
 class Objective(BaseTowerObject):
     color = (255,255,0)
     lives = 5
