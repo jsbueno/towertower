@@ -13,7 +13,7 @@ FLAGS = 0
 FRAMERATE = 30
 
 
-WAVE_ENEMIES = [20]
+WAVE_ENEMIES = [10, 5, 5]
 
 Group = pygame.sprite.OrderedUpdates
 
@@ -142,8 +142,17 @@ class Enemy(Targetting):
         if self.position == self.objective.position:
             self.objective.enemies_reached.add(self)
             self.kill()
-            print len(self.objective.enemies_reached)
 
+class StrongEnemy(Enemy):
+    color = (255, 128, 0)
+    size = 12
+    endurance = 25
+
+class FastEnemy(Enemy):
+    color = (128,255,0)
+    size = 18
+    endurance = 3
+    speed = 4
 
 class Tower(BaseTowerObject):
     size = 15
@@ -172,6 +181,7 @@ class Shot(Targetting):
     color = (0, 255, 0)
     speed = 5
     range_ = 800
+    piercing = 2
 
     movement_type = "straight"
 
@@ -201,10 +211,15 @@ class Shot(Targetting):
 
         super(Shot, self).update()
 
-        shot = None
-        for shot in pygame.sprite.spritecollide(self, self.map_.enemies, False):
-            shot.kill()
-        if shot: self.kill()
+        shot_enemy = None
+        for shot_enemy in pygame.sprite.spritecollide(self, self.map_.enemies, False):
+            # No surprises in Python as long as we are using imutable objects
+            # to keep data: the class "endurance" atribute
+            # is properly assigned to ths instance class at the first "-="
+            shot_enemy.endurance -= self.piercing
+            if shot_enemy.endurance <= 0:
+                shot_enemy.kill()
+        if shot_enemy: self.kill()
 
         if self.position.distance(self.start_pos) > self.range_:
             self.kill()
@@ -256,10 +271,11 @@ def iteration(map_):
 def start_map(map_):
     obj = Objective(map_, Vector(randint(0, SIZE[0]), randint(0, SIZE[1])))
     map_.objective.add(obj)
-    for i in range(WAVE_ENEMIES[0]):
-        enemy = Enemy(map_, 
-                      Vector(randint(0, SIZE[0]), randint(0, SIZE[1])))
-        map_.enemies.add(enemy)
+    for enemy_kind, number in zip((Enemy, StrongEnemy, FastEnemy), WAVE_ENEMIES ):
+        for i in range(number):
+            enemy = enemy_kind(map_,
+                        Vector(randint(0, SIZE[0]), randint(0, SIZE[1])))
+            map_.enemies.add(enemy)
 
 
 def main():
