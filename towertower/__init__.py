@@ -13,7 +13,7 @@ FLAGS = 0
 FRAMERATE = 30
 
 
-WAVE_ENEMIES = [3, 3, 0]
+WAVE_ENEMIES = [1, 5, 1]
 
 Group = pygame.sprite.OrderedUpdates
 
@@ -75,6 +75,30 @@ class Vector(object):
             return 0
         return self / size
 
+
+class Event(object):
+    def __init__(self, event_type, callback):
+        self.type = event_type
+        self.callback = callback
+
+    def __call__(self, instance=None):
+        self.callback(instance)
+
+class EventQueue(object):
+    def __init__(self):
+        self._list = []
+
+    def post(self, event):
+        self._list.append(event)
+
+    def pick(self, type_=None):
+        for i, event in enumerate(self._list):
+            if type_ is None or event.type == type_:
+                del self._list[i]
+                return event
+        return None
+
+
 def draw_bg(surface, rect=None):
     if rect is None:
         surface.fill((0,0,0))
@@ -91,6 +115,7 @@ class BaseTowerObject(pygame.sprite.Sprite):
         self.position = position
         self.rect = pygame.Rect((0,0,self.size, self.size))
         self.rect.center = position
+        self.events = EventQueue()
 
 
 class Targetting(BaseTowerObject):
@@ -167,18 +192,24 @@ class Tower(BaseTowerObject):
             self.shot_type = globals()[self.shot_type]
         self.last_shot = self.repeat_rate
 
+
     def update(self):
         super(Tower, self).update()
         self.last_shot -= 1
         if self.last_shot <= 0:
             self.last_shot = self.repeat_rate
-            self.shoot()
-    
+            if self.shoot():
+                event = self.events.pick("after_shot")
+                if event: event(self)
+
     def shoot(self):
         try:
-            self.map_.shots.add(self.shot_type(self.map_, Vector(self.position)))
+            self.map_.shots.add(self.shot_type(
+                self.map_, Vector(self.position), piercing=getattr(self, "piercing", None)))
+            return True
         except NoEnemyInRange:
             pass
+        return False
 
 class TeleTower(Tower):
     size = 15
@@ -195,8 +226,10 @@ class Shot(Targetting):
 
     movement_type = "straight"
 
-    def __init__(self, *args):
+    def __init__(self, *args, **kw):
         super(Shot, self).__init__(*args)
+        if kw.get("piercing", False):
+            self.piercing = kw.pop("piercing")
         self.start_pos = self.position
         objective = self.get_closer_enemy()
         if objective and self.position.distance(objective.position) <= self.range_:
@@ -296,7 +329,11 @@ class GamePlay(object):
         pygame.event.pump()
         for event in pygame.event.get():
             if event.type == MOUSEBUTTONDOWN:
-                if not self.gui(event):
+                if self.gui(event):
+                    pass
+                elif self.tower_clicked(event):
+                    pass
+                else:
                     self.map.towers.add(
                         self.active_towertype(self.map, Vector(event.pos)))
             elif event.type == KEYDOWN and event.key == K_ESCAPE:
@@ -357,6 +394,23 @@ class GamePlay(object):
             if rect.collidepoint(event.pos):
                 self.active_towertype = towertype
                 break
+        return True
+
+    def tower_clicked(self, event):
+        for tower in self.map.towers:
+            if tower.rect.collidepoint(event.pos):
+                break
+        else:
+            return False
+        original_image = tower.image
+        tower.image = pygame.surface.Surface((tower.size, tower.size))
+        tower.image.fill((255,255,255))
+        tower.piercing = 300
+        def restore_tower(instance):
+            if hasattr(instance, "piercing"):
+                delattr(instance, "piercing")
+            instance.image = original_image
+        tower.events.post(Event("after_shot", restore_tower))
         return True
 
 
