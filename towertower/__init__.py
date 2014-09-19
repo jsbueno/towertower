@@ -13,7 +13,7 @@ FLAGS = 0
 FRAMERATE = 30
 
 
-WAVE_ENEMIES = [10, 5, 5]
+WAVE_ENEMIES = [3, 3, 0]
 
 Group = pygame.sprite.OrderedUpdates
 
@@ -157,10 +157,14 @@ class FastEnemy(Enemy):
 class Tower(BaseTowerObject):
     size = 15
     color = (0, 0, 255)
-    
+    shot_type = "Shot"
+
     repeat_rate = 15
     def __init__(self, *args):
         super(Tower, self).__init__(*args)
+        if isinstance(self.shot_type, basestring):
+            # TODO: create a game class registry from where to retrieve this
+            self.shot_type = globals()[self.shot_type]
         self.last_shot = self.repeat_rate
 
     def update(self):
@@ -172,9 +176,15 @@ class Tower(BaseTowerObject):
     
     def shoot(self):
         try:
-            self.map_.shots.add(Shot(self.map_, Vector(self.position)))
+            self.map_.shots.add(self.shot_type(self.map_, Vector(self.position)))
         except NoEnemyInRange:
             pass
+
+class TeleTower(Tower):
+    size = 15
+    color = (0, 255, 128)
+    shot_type = "TeleShot"
+
 
 class Shot(Targetting):
     size = 3
@@ -224,6 +234,10 @@ class Shot(Targetting):
         if self.position.distance(self.start_pos) > self.range_:
             self.kill()
 
+class TeleShot(Shot):
+    color = (255, 128, 0)
+    range_ = 150
+    movement_type = "tracking"
 
 class Objective(BaseTowerObject):
     color = (255,255,0)
@@ -248,6 +262,7 @@ class Map(object):
         self.shots = Group()
         self.objective = Group()
 
+
 class GamePlay(object):
 
     def __init__(self):
@@ -258,10 +273,13 @@ class GamePlay(object):
             pygame.quit()
             raise
 
+
     def main(self):
         ticks = 0
+        self.active_towertype = Tower
         self.map = Map()
         self.start_map()
+        self.create_gui()
         try:
             while True:
                 try:
@@ -279,7 +297,8 @@ class GamePlay(object):
         for event in pygame.event.get():
             if event.type == MOUSEBUTTONDOWN:
                 if not self.gui(event):
-                    self.map.towers.add(Tower(self.map, Vector(event.pos)))
+                    self.map.towers.add(
+                        self.active_towertype(self.map, Vector(event.pos)))
             elif event.type == KEYDOWN and event.key == K_ESCAPE:
                 raise GameOver
 
@@ -290,6 +309,7 @@ class GamePlay(object):
             group.clear(self.screen, draw_bg)
             group.update()
             group.draw(self.screen)
+        self.draw_gui()
         pygame.display.flip()
         pygame.time.delay(FRAMERATE)
 
@@ -302,8 +322,42 @@ class GamePlay(object):
                             Vector(randint(0, SIZE[0]), randint(0, SIZE[1])))
                 self.map.enemies.add(enemy)
 
+    def create_gui(self):
+        SLOTSIZE = 45
+        SLOTCOLS = 2
+        SLOTROWS = 5
+        # This is in % of screen size:
+        GUIPOS = (10, 50)
+        self.towertypes = [Tower, TeleTower]
+        self.gui_rect = pygame.Rect((0,0, SLOTCOLS * SLOTSIZE, SLOTROWS * SLOTSIZE))
+        self.gui_rect.center = int(GUIPOS[0] * SIZE[0] / 100.0), int(GUIPOS[1] * SIZE[1] / 100.0)
+        self.gui_rects = []
+        self.gui_icons = Group()
+        index = 0
+        for y in xrange(SLOTROWS):
+            for x in xrange(SLOTCOLS):
+                slot_rect = pygame.Rect((self.gui_rect.left + x * SLOTSIZE,
+                                        self.gui_rect.top + y * SLOTSIZE,
+                                        SLOTSIZE, SLOTSIZE))
+                self.gui_rects.append(slot_rect)
+                if index < len(self.towertypes):
+                    self.gui_icons.add(self.towertypes[index](self.map, slot_rect.center))
+                index += 1
+
+    def draw_gui(self):
+        for rect in self.gui_rects:
+            pygame.draw.rect(self.screen, (255,255,255),  rect, 1)
+        self.gui_icons.draw(self.screen)
+
+
     def gui(self, event):
-        return False
+        if not self.gui_rect.collidepoint(event.pos):
+            return False
+        for rect, towertype in zip(self.gui_rects, self.towertypes):
+            if rect.collidepoint(event.pos):
+                self.active_towertype = towertype
+                break
+        return True
 
 
 if __name__ == "__main__":
