@@ -248,56 +248,65 @@ class Map(object):
         self.shots = Group()
         self.objective = Group()
 
+class GamePlay(object):
 
-def user_iteration(map_):
-    pygame.event.pump()
-    for event in pygame.event.get():
-        if event.type == MOUSEBUTTONDOWN:
-            map_.towers.add(Tower(map_, Vector(event.pos)))
-        elif event.type == KEYDOWN and event.key == K_ESCAPE:
-            raise GameOver
-
-def iteration(map_):
-    global screen
-    object_types = "enemies towers shots objective"
-    user_iteration(map_)
-    for group in (getattr(map_, type_) for type_ in object_types.split()):
-        group.clear(screen, draw_bg)
-        group.update()
-        group.draw(screen)
-    pygame.display.flip()
-    pygame.time.delay(FRAMERATE)
-
-def start_map(map_):
-    obj = Objective(map_, Vector(randint(0, SIZE[0]), randint(0, SIZE[1])))
-    map_.objective.add(obj)
-    for enemy_kind, number in zip((Enemy, StrongEnemy, FastEnemy), WAVE_ENEMIES ):
-        for i in range(number):
-            enemy = enemy_kind(map_,
-                        Vector(randint(0, SIZE[0]), randint(0, SIZE[1])))
-            map_.enemies.add(enemy)
-
-
-def main():
-    ticks = 0
-    map_ = Map()
-    start_map(map_)
-    while True:
+    def __init__(self):
+        pygame.init()
         try:
-            iteration(map_)
-        except GameOver:
-            break
-    
-def init():
-    global screen
-    pygame.init()
-    
-    try:
-        screen = pygame.display.set_mode(SIZE, FLAGS)
-        main()
-    finally:
-        pygame.quit()
+            self.screen = pygame.display.set_mode(SIZE, FLAGS)
+        except Exception:
+            pygame.quit()
+            raise
+
+    def main(self):
+        ticks = 0
+        self.map = Map()
+        self.start_map()
+        try:
+            while True:
+                try:
+                    self.iteration()
+                except GameOver:
+                    break
+        except Exception as error:
+            pygame.quit()
+            if not isinstance(error, (GameOver, KeyboardInterrupt)):
+                raise
+
+
+    def user_iteration(self):
+        pygame.event.pump()
+        for event in pygame.event.get():
+            if event.type == MOUSEBUTTONDOWN:
+                if not self.gui(event):
+                    self.map.towers.add(Tower(self.map, Vector(event.pos)))
+            elif event.type == KEYDOWN and event.key == K_ESCAPE:
+                raise GameOver
+
+    def iteration(self):
+        object_types = "enemies towers shots objective"
+        self.user_iteration()
+        for group in (getattr(self.map, type_) for type_ in object_types.split()):
+            group.clear(self.screen, draw_bg)
+            group.update()
+            group.draw(self.screen)
+        pygame.display.flip()
+        pygame.time.delay(FRAMERATE)
+
+    def start_map(self):
+        obj = Objective(self.map, Vector(randint(0, SIZE[0]), randint(0, SIZE[1])))
+        self.map.objective.add(obj)
+        for enemy_kind, number in zip((Enemy, StrongEnemy, FastEnemy), WAVE_ENEMIES ):
+            for i in range(number):
+                enemy = enemy_kind(self.map,
+                            Vector(randint(0, SIZE[0]), randint(0, SIZE[1])))
+                self.map.enemies.add(enemy)
+
+    def gui(self, event):
+        return False
+
 
 if __name__ == "__main__":
-    init()
+    g = GamePlay()
+    g.main()
 
