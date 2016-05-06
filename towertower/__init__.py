@@ -7,7 +7,8 @@ from random import randint
 import pygame
 from pygame.locals import *
 
-SIZE = 800,600
+
+SIZE = 800, 600
 FLAGS = 0
 # actually, delay in ms:
 FRAMERATE = 30
@@ -17,8 +18,10 @@ WAVE_ENEMIES = [1, 5, 1]
 
 Group = pygame.sprite.OrderedUpdates
 
+
 class GameOver(Exception):
     pass
+
 
 class NoEnemyInRange(Exception):
     pass
@@ -32,7 +35,7 @@ class Vector(object):
         else:
             self.x = x
             self.y = y
- 
+
     def __getitem__(self, index):
         if index == 0:
             return self.x
@@ -43,29 +46,29 @@ class Vector(object):
 
     def __add__(self, other):
         return Vector(self[0] + other[0], self[1] + other[1])
-     
+
     def __sub__(self, other):
         return Vector(self[0] - other[0], self[1] - other[1])
 
     def __mul__(self, other):
         return Vector(self[0] * other, self[1] * other)
-     
+
     def __div__(self, other):
         return Vector(self[0] / other, self[1] / other)
 
     __truediv__ = __div__
 
-
     def size(self):
         return (self[0] ** 2 + self[1] ** 2) ** 0.5
-     
+
     def distance(self, other):
         return (self - other).size()
-         
+
     def __repr__(self):
         return "Vector({}, {})".format(self.x, self.y)
-    
+
     epsilon = 1
+
     def __eq__(self, other):
         return self.distance(other) < self.epsilon
 
@@ -84,6 +87,7 @@ class Event(object):
     def __call__(self, instance=None):
         self.callback(instance)
 
+
 class EventQueue(object):
     def __init__(self):
         self._list = []
@@ -101,19 +105,21 @@ class EventQueue(object):
 
 def draw_bg(surface, rect=None):
     if rect is None:
-        surface.fill((0,0,0))
-    pygame.draw.rect(surface, (0,0,0), rect)
+        surface.fill((0, 0, 0))
+    pygame.draw.rect(surface, (0, 0, 0), rect)
+
 
 class BaseTowerObject(pygame.sprite.Sprite):
     size = 20
-    color = (255,255,255)
-    def __init__(self, map_, position=Vector((0,0))):
+    color = (255, 255, 255)
+
+    def __init__(self, map_, position=Vector((0, 0))):
         super(BaseTowerObject, self).__init__()
         self.map_ = map_
         self.image = pygame.surface.Surface((self.size, self.size))
         self.image.fill(self.color)
         self.position = position
-        self.rect = pygame.Rect((0,0,self.size, self.size))
+        self.rect = pygame.Rect((0, 0, self.size, self.size))
         self.rect.center = position
         self.events = EventQueue()
 
@@ -147,20 +153,20 @@ class Targetting(BaseTowerObject):
     def _update(self, direction):
         self.position += direction * self.speed
 
-    
+
 class Enemy(Targetting):
     speed = 1
     size = 15
     color = (255, 0, 0)
-    
+
     speed = 1
     endurance = 5
-    
+
     def __init__(self, map_, position):
         super(Enemy, self).__init__(map_, position)
         self.speed = self.__class__.speed
         self.stamina = self.__class__.endurance
-        
+
     def update(self):
         self.objective = iter(self.map_.objective).next()
         super(Enemy, self).update()
@@ -168,16 +174,19 @@ class Enemy(Targetting):
             self.objective.enemies_reached.add(self)
             self.kill()
 
+
 class StrongEnemy(Enemy):
     color = (255, 128, 0)
     size = 12
     endurance = 25
 
+
 class FastEnemy(Enemy):
-    color = (128,255,0)
+    color = (128, 255, 0)
     size = 18
     endurance = 3
     speed = 4
+
 
 class Tower(BaseTowerObject):
     size = 15
@@ -185,13 +194,13 @@ class Tower(BaseTowerObject):
     shot_type = "Shot"
 
     repeat_rate = 15
+
     def __init__(self, *args):
         super(Tower, self).__init__(*args)
         if isinstance(self.shot_type, basestring):
             # TODO: create a game class registry from where to retrieve this
             self.shot_type = globals()[self.shot_type]
         self.last_shot = self.repeat_rate
-
 
     def update(self):
         super(Tower, self).update()
@@ -200,7 +209,8 @@ class Tower(BaseTowerObject):
             self.last_shot = self.repeat_rate
             if self.shoot():
                 event = self.events.pick("after_shot")
-                if event: event(self)
+                if event:
+                    event(self)
 
     def shoot(self):
         try:
@@ -210,6 +220,7 @@ class Tower(BaseTowerObject):
         except NoEnemyInRange:
             pass
         return False
+
 
 class TeleTower(Tower):
     size = 15
@@ -262,38 +273,68 @@ class Shot(Targetting):
             shot_enemy.endurance -= self.piercing
             if shot_enemy.endurance <= 0:
                 shot_enemy.kill()
-        if shot_enemy: self.kill()
+        if shot_enemy:
+            self.kill()
 
         if self.position.distance(self.start_pos) > self.range_:
             self.kill()
+
 
 class TeleShot(Shot):
     color = (255, 128, 0)
     range_ = 150
     movement_type = "tracking"
 
+
 class Objective(BaseTowerObject):
-    color = (255,255,0)
+    color = (255, 255, 0)
     lives = 5
-    
+
     def __init__(self, map_, position):
         super(Objective, self).__init__(map_, position)
-        self.enemies_reached = set() # not pygame.sprite.Group(), because in the alpha
-                                     # implementation, enemies here are the count to 
-                                     # indicate map defeat. And killing the enemies
-                                     # would remove then from a Group
-        
+        self.enemies_reached = set()
+        # not pygame.sprite.Group(), because in the alpha
+        # implementation, enemies here are the count to
+        # indicate map defeat. And killing the enemies
+        # would remove then from a Group
+
     def update(self):
         super(Objective, self).update()
         if len(self.enemies_reached) > self.lives:
             raise GameOver
 
+
+class MapLayer(object):
+    def __init__(self, name, map, scale=10, default=0):
+        self.map = map
+        self.name = name
+        self.map[name] = self
+        # scale is cell size in linear pixels
+        # - basically a layer has 1/scale cells in a given map direction
+        self.scale = scale
+        self.default = default
+        # may be overriden and a 2d array can be used instead:
+        self.data = {}
+
+    def __getitem__(self, pos):
+        """
+        pos should be passed in map coordinates, regardless of layer scale
+        """
+        return self.data.get((pos[0] // self.scale, pos[1] // self.scale), self.default)
+
+    def __setitem__(self, pos, value):
+        self.data[pos[0] // self.scale, pos[1] // self.scale] = value
+
+
 class Map(object):
     def __init__(self):
+        # map szie in pixels at zoom levell 100%
+        self.size = SIZE
         self.enemies = Group()
         self.towers = Group()
         self.shots = Group()
         self.objective = Group()
+        self.layers = {}
 
 
 class GamePlay(object):
@@ -305,7 +346,6 @@ class GamePlay(object):
         except Exception:
             pygame.quit()
             raise
-
 
     def main(self):
         ticks = 0
@@ -323,7 +363,6 @@ class GamePlay(object):
             pygame.quit()
             if not isinstance(error, (GameOver, KeyboardInterrupt)):
                 raise
-
 
     def user_iteration(self):
         pygame.event.pump()
@@ -353,10 +392,12 @@ class GamePlay(object):
     def start_map(self):
         obj = Objective(self.map, Vector(randint(0, SIZE[0]), randint(0, SIZE[1])))
         self.map.objective.add(obj)
-        for enemy_kind, number in zip((Enemy, StrongEnemy, FastEnemy), WAVE_ENEMIES ):
+        for enemy_kind, number in zip((Enemy, StrongEnemy, FastEnemy), WAVE_ENEMIES):
             for i in range(number):
-                enemy = enemy_kind(self.map,
-                            Vector(randint(0, SIZE[0]), randint(0, SIZE[1])))
+                enemy = enemy_kind(
+                    self.map,
+                    Vector(randint(0, SIZE[0]), randint(0, SIZE[1]))
+                )
                 self.map.enemies.add(enemy)
 
     def create_gui(self):
@@ -366,7 +407,7 @@ class GamePlay(object):
         # This is in % of screen size:
         GUIPOS = (10, 50)
         self.towertypes = [Tower, TeleTower]
-        self.gui_rect = pygame.Rect((0,0, SLOTCOLS * SLOTSIZE, SLOTROWS * SLOTSIZE))
+        self.gui_rect = pygame.Rect((0, 0, SLOTCOLS * SLOTSIZE, SLOTROWS * SLOTSIZE))
         self.gui_rect.center = int(GUIPOS[0] * SIZE[0] / 100.0), int(GUIPOS[1] * SIZE[1] / 100.0)
         self.gui_rects = []
         self.gui_icons = Group()
@@ -383,9 +424,8 @@ class GamePlay(object):
 
     def draw_gui(self):
         for rect in self.gui_rects:
-            pygame.draw.rect(self.screen, (255,255,255),  rect, 1)
+            pygame.draw.rect(self.screen, (255, 255, 255), rect, 1)
         self.gui_icons.draw(self.screen)
-
 
     def gui(self, event):
         if not self.gui_rect.collidepoint(event.pos):
@@ -404,8 +444,9 @@ class GamePlay(object):
             return False
         original_image = tower.image
         tower.image = pygame.surface.Surface((tower.size, tower.size))
-        tower.image.fill((255,255,255))
+        tower.image.fill((255, 255, 255))
         tower.piercing = 300
+
         def restore_tower(instance):
             if hasattr(instance, "piercing"):
                 delattr(instance, "piercing")
@@ -417,4 +458,3 @@ class GamePlay(object):
 if __name__ == "__main__":
     g = GamePlay()
     g.main()
-
