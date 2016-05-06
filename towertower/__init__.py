@@ -116,12 +116,33 @@ class BaseTowerObject(pygame.sprite.Sprite):
     def __init__(self, map_, position=Vector((0, 0))):
         super(BaseTowerObject, self).__init__()
         self.map_ = map_
-        self.image = pygame.surface.Surface((self.size, self.size))
-        self.image.fill(self.color)
+        self._reset_image()
         self.position = position
         self.rect = pygame.Rect((0, 0, self.size, self.size))
         self.rect.center = position
         self.events = EventQueue()
+
+    def _reset_image(self):
+        self.image = pygame.surface.Surface((self.size, self.size))
+        self.image.fill(self.color)
+
+    def update(self):
+        self.draw_energy_bar()
+
+    def draw_energy_bar(self):
+        if hasattr(self, "energy"):
+            total, remaining = energy = self.energy
+            if getattr(self, "_last_energy", None) == energy:
+                return
+            self._reset_image()
+            self._last_energy = energy
+            width = int(self.size * 0.7)
+            y = int(self.size * 0.8)
+            x = int(self.size * 0.15)
+            if remaining < total:
+                pygame.draw.line(self.image, (0, 0, 0), (x, y), (x + width, y), 3)
+            color = (0, 255, 0) if remaining > total / 2 else (255, 255, 0) if remaining > total / 4 else (255, 0, 0)
+            pygame.draw.line(self.image, color, (x, y), (x + int(width * remaining / total), y), 3)
 
 
 class Targetting(BaseTowerObject):
@@ -173,6 +194,10 @@ class Enemy(Targetting):
         if self.position == self.objective.position:
             self.objective.enemies_reached.add(self)
             self.kill()
+
+    @property
+    def energy(self):
+        return self.__class__.endurance, self.endurance
 
 
 class StrongEnemy(Enemy):
@@ -302,6 +327,10 @@ class Objective(BaseTowerObject):
         super(Objective, self).update()
         if len(self.enemies_reached) > self.lives:
             raise GameOver
+
+    @property
+    def energy(self):
+        return self.lives, self.lives - len(self.enemies_reached)
 
 
 class MapLayer(object):
